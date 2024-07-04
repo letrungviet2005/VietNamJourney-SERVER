@@ -109,9 +109,12 @@ class UserController extends Controller
 
         $avatarPath = null;
         if ($avatar) {
-            // Store the avatar with a unique name in the 'public/image' directory
+            // Store the avatar with a unique name in the 'storage/app/image' directory
             $avatarName = uniqid() . '.' . $avatar->getClientOriginalExtension();
-            $avatarPath = $avatar->storeAs('image', $avatarName, 'public');
+            $avatarPath = $avatar->storeAs('image', $avatarName); // Stored in 'storage/app/image'
+
+            // Prepare relative path for database storage
+            $avatarDbPath = 'image/' . $avatarName; // Relative path saved in database
         }
 
         try {
@@ -122,7 +125,7 @@ class UserController extends Controller
                     'Name' => $name,
                     'LiveAt' => $location,
                     'Role' => $role,
-                    'Image' => $avatarPath, // Store the avatar path in the database
+                    'Image' => $avatarDbPath, // Store the relative path in the database
                 ]);
 
             // Update or insert Facebook link
