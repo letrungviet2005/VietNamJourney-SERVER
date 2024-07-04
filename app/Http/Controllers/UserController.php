@@ -9,6 +9,7 @@ use App\Models\Link;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use App\Models\Post;
 use DateTime;
 use DateTimeZone;
@@ -84,8 +85,21 @@ class UserController extends Controller
     }
     public function updateUserInfo(Request $request)
     {
-        Log::info('Received request to update user information', $request->all());
+        // Validate the request inputs
+        $validator = Validator::make($request->all(), [
+            'userId' => 'required|integer',
+            'name' => 'nullable|string',
+            'location' => 'nullable|string',
+            'facebookLink' => 'nullable|string',
+            'role' => 'nullable|string',
+            'avatar' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+        ]);
 
+        if ($validator->fails()) {
+            return response()->json(['success' => false, 'error' => $validator->errors()], 400);
+        }
+
+        // Get the validated inputs
         $userId = $request->input('userId');
         $name = $request->input('name');
         $location = $request->input('location');
@@ -93,22 +107,14 @@ class UserController extends Controller
         $role = $request->input('role');
         $avatar = $request->file('avatar');
 
+        $avatarPath = null;
+        if ($avatar) {
+            // Store the avatar with a unique name in the 'public/image' directory
+            $avatarName = uniqid() . '.' . $avatar->getClientOriginalExtension();
+            $avatarPath = $avatar->storeAs('image', $avatarName, 'public');
+        }
+
         try {
-            // Initialize avatarUrl to null
-            $avatarUrl = null;
-
-            // Check if avatar is provided
-            if ($avatar) {
-                $avatarName = uniqid() . '.' . $avatar->getClientOriginalExtension();
-                $avatarPath = $avatar->storeAs('image', $avatarName, 'public');
-                $avatarUrl = Storage::url($avatarPath);
-                Log::info('Avatar uploaded successfully', ['avatarUrl' => $avatarUrl]);
-            } elseif ($request->has('avatar')) {
-                // Handle case where avatar is explicitly set to null in the request
-                $avatarUrl = 'null'; // Replace with your desired representation of null
-                Log::info('Avatar explicitly set to null');
-            }
-
             // Update the user information
             DB::table('user_information')
                 ->where('UserLogin_ID', $userId)
@@ -116,9 +122,8 @@ class UserController extends Controller
                     'Name' => $name,
                     'LiveAt' => $location,
                     'Role' => $role,
-                    'Image' => $avatarUrl // Updated to use $avatarUrl instead of $avatarPath
+                    'Image' => $avatarPath, // Store the avatar path in the database
                 ]);
-            Log::info('User information updated successfully', ['userId' => $userId]);
 
             // Update or insert Facebook link
             DB::table('link')
@@ -126,14 +131,13 @@ class UserController extends Controller
                     ['User_ID' => $userId, 'Social' => 'Facebook'],
                     ['Link' => $facebookLink]
                 );
-            Log::info('Facebook link updated or inserted successfully', ['userId' => $userId, 'facebookLink' => $facebookLink]);
 
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
-            Log::error('Error updating user information', ['error' => $e->getMessage()]);
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'error' => 'Database error: ' . $e->getMessage()], 500);
         }
     }
+
     private function timeElapsedString($datetime, $full = false)
     {
         $timezone = new DateTimeZone('Asia/Ho_Chi_Minh');
